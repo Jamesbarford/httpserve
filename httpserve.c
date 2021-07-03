@@ -128,7 +128,7 @@ static int tcpServerCreate(int port, int backlog) {
 
   if (ptr == NULL) {
     tcpCleanupAfterFailure(sockfd, servinfo);
-    return httpservePanic("%s\n", "failed to bind socket");
+    return httpservePanic("failed to bind socket\n");
   }
 
   freeaddrinfo(servinfo);
