@@ -23,7 +23,7 @@ Set custom headers this with the  `-h` switch.
 ```bash
 echo '{"foo": "bar"}' | httpserve \
   -h 'Content-Type: application/json' \
-	-h 'Connection: close'
+  -h 'Connection: close'
 ```
 
 ### Setting a custom port
