@@ -40,4 +40,4 @@ Will serve the output of `cat ./content.html` on port `9000`
 make clean
 make
 make install # Might need to be run with sudo privileges
-``
+```
