@@ -145,7 +145,7 @@ static char *readAll(int fd) {
 	if ((buf = (char *)calloc(sizeof(char *), BUFSIZ)) == NULL)
 		return NULL;
 
-	for(;;) {
+	while (1) {
 		iter++;
 		bytes = read(fd, tmp, BUFSIZ - 1);
 		if (bytes <= 0) break;
@@ -164,7 +164,7 @@ static char *readAll(int fd) {
 	return buf;
 }
 
-static void writeResponseToSocket(int sockfd, char *response) {
+static int writeResponseToSocket(int sockfd, char *response) {
   int total = 0;
   int len = strlen(response);
   int bytes_left = len;
@@ -174,20 +174,40 @@ static void writeResponseToSocket(int sockfd, char *response) {
     sent = send(sockfd, response, bytes_left, 0);
 
     if (sent == -1)
-      httpservePanic("failed to send: %s\n", strerror(errno));
+      return TCP_ERR;
 
     total += sent;
     bytes_left -= sent;
   }
 
-  len = total;
+  return sent;
+}
+
+// Send the time as part of the payload
+void getServerTime(char *timebuf) {
+  time_t raw;
+  struct tm *ptm;
+
+  if ((raw = time(NULL)) == -1)
+    httpservePanic("failed to set time: %s\n", strerror(errno));
+
+  if ((ptm = localtime(&raw)) == NULL)
+    httpservePanic("failed to get localtime: %s\n", strerror(errno));
+
+  strftime(timebuf, BUFSIZ, "%a, %d %b %G %X %Z", ptm);
 }
 
 // Compose response to sent to a client
-static char *createResponseBuffer(char *body, char *timestamp, char *headers) {
+static char *createResponseBuffer(char *body, char *headers) {
   char *buf;
-  int content_len = strlen(body);
-  int timestamp_len = strlen(timestamp);
+  char timestamp[BUFSIZ];
+  int content_len;
+  int timestamp_len;
+
+  getServerTime(timestamp);
+
+  content_len = strlen(body);
+  timestamp_len = strlen(timestamp);
 
   if ((buf = (char *)calloc(BUFSIZ + content_len + timestamp_len,
           sizeof(char *))) == NULL) {
@@ -210,18 +230,18 @@ static char *createResponseBuffer(char *body, char *timestamp, char *headers) {
   return buf;
 }
 
-// Send the time as part of the payload
-void getServerTime(char *timebuf) {
-  time_t raw;
-  struct tm *ptm;
+int writeResponse(int sockfd, char *body, char *headers) {
+  char *response;
+  if ((response = createResponseBuffer(body, headers)) == NULL)
+    return httpservePanic("failed to create response buffer\n");
 
-  if ((raw = time(NULL)) == -1)
-    httpservePanic("failed to set time: %s\n", strerror(errno));
+  if (writeResponseToSocket(sockfd, response) == TCP_ERR) {
+    free(response);
+    return httpservePanic("failed to send response: %s\n", strerror(errno));
+  }
 
-  if ((ptm = localtime(&raw)) == NULL)
-    httpservePanic("failed to get localtime: %s\n", strerror(errno));
-
-  strftime(timebuf, BUFSIZ, "%a, %d %b %G %X %Z", ptm);
+  free(response);
+  return TCP_OK;
 }
 
 /* get the command line arguments  */
@@ -231,11 +251,12 @@ static void getCmdOpts(httpOptions *opts, int argc, char **argv) {
   while ((arg = getopt(argc, argv, "h:p:")) != -1) {
     switch (arg) {
       case 'h': {
-        char *ptr = realloc(opts->headers, strlen(opts->headers) + strlen(optarg) * sizeof(char *));
-        if (ptr == NULL) {
+        char *ptr = realloc(opts->headers, strlen(opts->headers) +
+            strlen(optarg) * sizeof(char *));
+
+        if (ptr == NULL)
           httpservePanic("failed to realloc: %s\n", strerror(errno));
-        }
-          opts->headers = ptr;
+        opts->headers = ptr;
         strcat(opts->headers, optarg);
         strcat(opts->headers, "\r\n");
         break;
@@ -252,14 +273,12 @@ static void getCmdOpts(httpOptions *opts, int argc, char **argv) {
 
 // Read data from stdin and serve it!
 int main(int argc, char **argv) {
-  char *body, *response;
-  int serverfd = -1, newfd = -1;
+  char *body;
+  int serverfd = -1;
+  int newfd = -1;
   struct sockaddr_storage client_addr;
   socklen_t addrlen;
-  char timebuf[BUFSIZ] = {'\0'};
-  httpOptions opts;
-  opts.port = PORT;
-  opts.headers = malloc(1);
+  httpOptions opts = {.headers = malloc(1), .port = PORT};
 
   getCmdOpts(&opts, argc, argv);
 
@@ -271,19 +290,15 @@ int main(int argc, char **argv) {
   
   printf("Server listening on port: %d\n", opts.port);
 
-  for (;;) {
+  while (1) {
     if ((newfd = accept(serverfd, (struct sockaddr *)&client_addr,
             &addrlen)) == -1) {
       continue;
     }
 
-    getServerTime(timebuf);
+    writeResponse(newfd, body, opts.headers);
 
-    if ((response = createResponseBuffer(body, timebuf, opts.headers)) == NULL)
-      return httpservePanic("failed to create response buffer\n");
-
-    writeResponseToSocket(newfd, response);
-    free(response);
+    (void)close(newfd);
   }
 
   free(body);
