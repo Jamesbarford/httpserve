@@ -8,15 +8,13 @@
 Creates an http server on localhost:8000 by default, serving whatever has been passed in through stdin.
 .Sh DESCRIPTION
 Serve stdin to a localhost port, you can add as many custom response headers you want with the -h option. The port number defaults to 8000. This application was born from the need to set aribitrary http headers quickly to see what effects they have on content being served.
-.El
-.SH MODIFIERS
+.Sh MODIFIERS
 .Bl -tag -width XX
 .It -h <header>
 Set custom http response headers. I.e -h 'Content-Type: text/html'
 .It -p <port>
-.Rs
-The localhost port number, defaults to 8000.
 .El
+The localhost port number, defaults to 8000.
 .Sh EXAMPLES
 .Bl -tag -width XX
 .It echo '<html></h1>Hello, world!</h1></html>' | httpserve
@@ -26,6 +24,7 @@ reads the html from stdin and serves it on localhost:8000
 .It echo '<html></h1>Hello, world!</h1></html>' | httpserve -p 9000 -h 'Content-Type: text/html' -h 'Connection: close'
 .Pp
 reads the html from stdin and serves it on localhost:9000, sets custom http response headers.
+.El
 .Sh AUTHOR
 .An James Barford-Evans.
 .Sh DOCUMENTATION & SOURCE
