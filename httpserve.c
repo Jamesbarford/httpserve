@@ -40,8 +40,8 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
-#define TCP_OK  1
-#define TCP_ERR 0
+#define OK  1
+#define ERR 0
 
 #define PORT    8000
 #define BACKLOG 100
@@ -62,14 +62,13 @@ static int httpservePanic(char *fmt, ...) {
 
   va_end(va);
   exit(EXIT_FAILURE);
-  return TCP_ERR;
+  return ERR;
 }
 
-static int tcpCleanupAfterFailure(int sockfd, struct addrinfo *servinfo) {
+static void tcpCleanupAfterFailure(int sockfd, struct addrinfo *servinfo) {
   if (sockfd != -1)
     (void)close(sockfd);
   freeaddrinfo(servinfo);
-  return TCP_ERR;
 }
 
 static int setSockReuseAddr(int sockfd) {
@@ -78,22 +77,22 @@ static int setSockReuseAddr(int sockfd) {
   if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1)
     return httpservePanic("failed to set SO_REUSEADDR: %s\n", strerror(errno));
 
-  return TCP_OK;
+  return OK;
 }
 
 static int tcpListen(int sockfd, struct sockaddr *sa, socklen_t len,
     int backlog) {
   if (bind(sockfd, sa, len) == -1) {
     close(sockfd);
-    return httpservePanic("failed to bind to port: %s\n", strerror(errno));
+    return ERR;
   }
 
   if (listen(sockfd, backlog) == -1) {
     close(sockfd);
-    return httpservePanic("failed to listen: %s\n", strerror(errno));
+    return ERR;
   }
 
-  return TCP_OK;
+  return OK;
 }
 
 // Create the server socket
@@ -117,18 +116,23 @@ static int tcpServerCreate(int port, int backlog) {
         == -1)
       continue;
 
-    if (setSockReuseAddr(sockfd) == TCP_ERR)
-      return tcpCleanupAfterFailure(sockfd, servinfo);
+    if (setSockReuseAddr(sockfd) == ERR) {
+      tcpCleanupAfterFailure(sockfd, servinfo);
+      httpservePanic("Error failed to set SO_REUSEADDR: %s\n",
+          strerror(errno));
+    }
 
-    if (tcpListen(sockfd, ptr->ai_addr, ptr->ai_addrlen, backlog) == TCP_ERR)
-      return tcpCleanupAfterFailure(sockfd, servinfo);
+    if (tcpListen(sockfd, ptr->ai_addr, ptr->ai_addrlen, backlog) == ERR) {
+      tcpCleanupAfterFailure(sockfd, servinfo);
+      httpservePanic("Error failed to listen: %s\n", strerror(errno));
+    }
 
     break;
   }
 
   if (ptr == NULL) {
     tcpCleanupAfterFailure(sockfd, servinfo);
-    return httpservePanic("failed to bind socket\n");
+    httpservePanic("failed to bind socket\n");
   }
 
   freeaddrinfo(servinfo);
@@ -147,7 +151,7 @@ static char *readAll(int fd) {
 
 	while (1) {
 		iter++;
-		bytes = read(fd, tmp, BUFSIZ - 1);
+		bytes = recv(fd, tmp, BUFSIZ - 1, 0);
 		if (bytes <= 0) break;
 		else {
 			tmp[bytes] = '\0';
@@ -164,7 +168,7 @@ static char *readAll(int fd) {
 	return buf;
 }
 
-static int writeResponseToSocket(int sockfd, char *response) {
+static int sendResponseToSocket(int sockfd, char *response) {
   int total = 0;
   int len = strlen(response);
   int bytes_left = len;
@@ -174,7 +178,7 @@ static int writeResponseToSocket(int sockfd, char *response) {
     sent = send(sockfd, response, bytes_left, 0);
 
     if (sent == -1)
-      return TCP_ERR;
+      return ERR;
 
     total += sent;
     bytes_left -= sent;
@@ -211,8 +215,6 @@ static char *createResponseBuffer(char *body, char *headers) {
 
   if ((buf = (char *)calloc(BUFSIZ + content_len + timestamp_len,
           sizeof(char *))) == NULL) {
-    httpservePanic("failed to allocate buffer for response: %s\n",
-        strerror(errno));
     return NULL;
   }
 
@@ -230,18 +232,18 @@ static char *createResponseBuffer(char *body, char *headers) {
   return buf;
 }
 
-int writeResponse(int sockfd, char *body, char *headers) {
+int sendResponse(int sockfd, char *body, char *headers) {
   char *response;
   if ((response = createResponseBuffer(body, headers)) == NULL)
-    return httpservePanic("failed to create response buffer\n");
+    return ERR;
 
-  if (writeResponseToSocket(sockfd, response) == TCP_ERR) {
+  if (sendResponseToSocket(sockfd, response) == ERR) {
     free(response);
-    return httpservePanic("failed to send response: %s\n", strerror(errno));
+    return ERR;
   }
 
   free(response);
-  return TCP_OK;
+  return OK;
 }
 
 /* get the command line arguments  */
@@ -252,7 +254,7 @@ static void getCmdOpts(httpOptions *opts, int argc, char **argv) {
     switch (arg) {
       case 'h': {
         char *ptr = realloc(opts->headers, strlen(opts->headers) +
-            strlen(optarg) * sizeof(char *));
+            strlen(optarg) * sizeof(char));
 
         if (ptr == NULL)
           httpservePanic("failed to realloc: %s\n", strerror(errno));
@@ -283,10 +285,10 @@ int main(int argc, char **argv) {
   getCmdOpts(&opts, argc, argv);
 
   if ((body = readAll(STDIN_FILENO)) == NULL)
-    return httpservePanic("failed to read from stdin\n");
+    return httpservePanic("Error: failed to read from stdin\n");
 
-  if ((serverfd = tcpServerCreate(opts.port, BACKLOG)) == TCP_ERR)
-    return httpservePanic("failed to create tcp server\n");
+  if ((serverfd = tcpServerCreate(opts.port, BACKLOG)) == ERR)
+    return httpservePanic("Error: failed to create tcp server\n");
   
   printf("Server listening on port: %d\n", opts.port);
 
@@ -296,14 +298,16 @@ int main(int argc, char **argv) {
       continue;
     }
 
-    writeResponse(newfd, body, opts.headers);
+    if (sendResponse(newfd, body, opts.headers) == ERR)
+      return httpservePanic("Error: failed to send response: %s\n",
+          strerror(errno));
 
     (void)close(newfd);
   }
 
   free(body);
+  free(opts.headers);
   (void)close(serverfd);
   (void)close(newfd);
   exit(EXIT_SUCCESS);
-  return 1; 
 }
