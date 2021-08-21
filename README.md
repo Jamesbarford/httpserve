@@ -2,6 +2,18 @@
 
 A programme that reads from `stdin` and serves this content by default on `localhost:8000`. Born from needing to test setting arbitrary http response headers.
 
+## Syntax
+
+```bash
+<input> | httpserve -p <port> -h <header> 
+```
+## Options
+```
+|Option|Value Example|Description|
+|---------|----|-----------|
+|`-p`|int, 8000|Port number to listen on, defaults to `8000`|
+|`-h`|string, 'Content-Type: text/html'|HTTP headers, can set multiple by using -h repeatedly|
+```
 
 ## Examples
 
@@ -35,7 +47,7 @@ cat ./content.html | httpserve -p 9000
 Will serve the output of `cat ./content.html` on port `9000`
 
 
-# Install
+# Installing
 ```bash
 make clean
 make
