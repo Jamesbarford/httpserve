@@ -151,7 +151,7 @@ static char *readAll(int fd) {
 
 	while (1) {
 		iter++;
-		bytes = recv(fd, tmp, BUFSIZ - 1, 0);
+		bytes = read(fd, tmp, BUFSIZ - 1);
 		if (bytes <= 0) break;
 		else {
 			tmp[bytes] = '\0';
