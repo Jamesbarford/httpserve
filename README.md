@@ -12,7 +12,7 @@ A programme that reads from `stdin` and serves this content by default on `local
 |Option|Value Example|Description|
 |---------|----|-----------|
 |`-p`|int, 8000|Port number to listen on, defaults to `8000`|
-|`-h`|string, 'Content-Type: text/html'|HTTP headers, can set multiple by using -h repeatedly|
+|`-h`|string, "Content-Type: text/html"|HTTP headers, can set multiple by using `-h` repeatedly|
 
 ## Examples
 
