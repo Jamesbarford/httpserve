@@ -8,12 +8,11 @@ A programme that reads from `stdin` and serves this content by default on `local
 <input> | httpserve -p <port> -h <header> 
 ```
 ## Options
-```
-|Option|Value Example|Description|
-|---------|----|-----------|
-|`-p`|int, 8000|Port number to listen on, defaults to `8000`|
-|`-h`|string, 'Content-Type: text/html'|HTTP headers, can set multiple by using -h repeatedly|
-```
+
+    |Option|Value Example|Description|
+    |---------|----|-----------|
+    |`-p`|int, 8000|Port number to listen on, defaults to `8000`|
+    |`-h`|string, 'Content-Type: text/html'|HTTP headers, can set multiple by using -h repeatedly|
 
 ## Examples
 
